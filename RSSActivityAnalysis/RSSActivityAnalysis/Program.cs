@@ -23,39 +23,43 @@ namespace RSSActivityAnalysis
                 {"Dateline NBC"                                       ,"https://podcastfeeds.nbcnews.com/dateline-nbc"},
                 {"The Lincoln Project"                                ,"https://lincolnproject.libsyn.com/rss"},
                 {"CNN"                                                ,"http://rss.cnn.com/rss/cnn_topstories.rss"},
-                //{"New York Times "                                    ,"https://archive.nytimes.com/www.nytimes.com/services/xml/rss/index.html?mcubz=0"},
-               // {"Huffington Post"                                    ,"https://www.huffpost.com/section/front-page/feed?x=1"},
-                //{"Fox News"                                           ,"http://www.foxnews.com/about/rss/"},
+                {"New York Times "                                    ,"https://archive.nytimes.com/www.nytimes.com/services/xml/rss/"},
+                {"Huffington Post"                                    ,"https://www.huffpost.com/section/front-page/feed?x=1"},
+                {"Fox News"                                           ,"http://www.foxnews.com/about/rss/"},
                 {"USA Today"                                          ,"http://rssfeeds.usatoday.com/UsatodaycomNation-TopStories"},
                 {"LifeHacker"                                         ,"https://lifehacker.com/rss"},
-                //{"Reuters"                                            ,"https://www.reuters.com/tools/rss"},
+                {"Reuters"                                            ,"https://www.reuters.com/tools/rss"},
                 {"Politico"                                           ,"http://www.politico.com/rss/politicopicks.xml"},
                 {"Yahoo News"                                         ,"https://www.yahoo.com/news/rss"},
-                //{"NPR"                                                ,"https://help.npr.org/customer/portal/articles/2094175-where-can-i-find-npr-rss-feeds-"},
                 {"Los Angeles Times"                                  ,"https://www.latimes.com/local/rss2.0.xml"},
              };
 
 
             GetLastActivity(companies);
-        }
-
-
-        static double GetLastActivity(string url)
-        {
-            var now = DateTimeOffset.Now;
-            using (var reader = XmlReader.Create(url))
-            {
-                var feed = SyndicationFeed.Load(reader);
-                var lastUpdate = feed.Items.Max(i => i.PublishDate > i.LastUpdatedTime ? i.PublishDate : i.LastUpdatedTime);
-                return (now - lastUpdate).TotalDays;
-            }
+            Console.WriteLine();
+            foreach (var c in GetCompaniesWithNoActivityFor(companies, 1))
+                Console.WriteLine($"{c} hasn't had an update in the range");
         }
 
         static void GetLastActivity(IDictionary<string, string> rssUrlDictionary)
         {
+            var now = DateTimeOffset.Now;
             foreach (var (company, url) in rssUrlDictionary)
             {
-                Console.WriteLine($"{company} last updated {GetLastActivity(url)} days ago");
+                try
+                {
+                    var days = 0.0;
+                    using (var reader = XmlReader.Create(url, new XmlReaderSettings { DtdProcessing = DtdProcessing.Ignore }))
+                    {
+                        var last = SyndicationFeed.Load(reader).LastPublishOrUpdate();
+                        days = (now - last).TotalDays;
+                    }
+                    Console.WriteLine($"{company} last updated {days} days ago");
+                }
+                catch (Exception ex)
+                {
+                    Console.Write($"{company}'s RSS feed read error: {ex.Message}");
+                }               
             }
         }
 
@@ -65,12 +69,19 @@ namespace RSSActivityAnalysis
             var now = DateTimeOffset.Now;
             foreach (var (company, url) in rssUrlDictionary)
             {
-                using (var reader = XmlReader.Create(url))
+                DateTimeOffset? lastActivity = default;
+                try
                 {
-                    var feed = SyndicationFeed.Load(reader);
-                    if ((now - feed.LastUpdatedTime).TotalDays > numberOfDays)
-                        yield return company;
+                    using (var reader = XmlReader.Create(url, new XmlReaderSettings { DtdProcessing = DtdProcessing.Ignore }))                    
+                         lastActivity = SyndicationFeed.Load(reader).LastPublishOrUpdate();                    
                 }
+                catch (Exception ex)
+                {
+
+                }
+
+                if (lastActivity.HasValue && (now - lastActivity.Value).TotalDays > numberOfDays)
+                    yield return company;
             }
         }
     }
